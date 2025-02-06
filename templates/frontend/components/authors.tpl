@@ -14,6 +14,43 @@
  * @uses $isChapterRequest bool Is true, if a chapter landing page is requested and not a monograph landing page
  *}
 
+{**
+ * Concat authors' name and affiliation 
+ * Filters texts using function filterPubPropValue
+ * @param array $authors, Required
+ * @param array $localeOrder, Required, From $pubLocaleData.localeOrder
+ * @param array $identifyAsEditors, Required
+ * @param array $filters, Optional, E.g. ['escape']
+ * @return array, As varaible $authorsWithAffiliationData
+ *}
+{function concatAuthorsWithAffiliationData}
+	{$authorsWithAffiliationData=[]}
+	{foreach from=$localeOrder item=$locale}
+		{$nameAffiliations=[]}
+		{foreach from=$authors item=$author}
+			{* Author's name *}
+			{$authorName=$author->getFullName()}
+			{filterPubPropValue value=$authorName filters=$filters}
+			{$authorName=$filteredPubPropValue}
+			{if $identifyAsEditors}
+				{capture assign="authorName"}{translate key="submission.editorName" editorName=$authorName}{/capture}
+			{/if}
+			{capture assign="name"}<span class="label">{$authorName}</span>{/capture}
+			{$nameAffiliation=$name}
+			{* Author's affiliation *}
+			{$authorAffiliation=$author->getData('affiliation')}
+			{if isset($authorAffiliation[$locale])}
+				{filterPubPropValue value=$authorAffiliation[$locale] filters=$filters}
+				{capture assign="affiliation"}<span class="value">{$filteredPubPropValue}</span>{/capture}
+				{capture assign="nameAffiliation"}{translate key="submission.authorWithAffiliation" name=$name affiliation=$affiliation}{/capture}
+			{/if}
+			{$nameAffiliations[]=$nameAffiliation}
+		{/foreach}
+		{$authorsWithAffiliationData[$locale]=$nameAffiliations}
+	{/foreach}
+	{assign "authorsWithAffiliationData" value=$authorsWithAffiliationData scope="parent"}
+{/function}
+
 <div class="item authors">
 	<h2 class="pkp_screen_reader">
 		{translate key="submission.authors"}
@@ -29,17 +66,28 @@
 	{if $authors|@count < 5}
 		{foreach from=$authors item=author}
 			<div class="sub_item">
-				<div class="label">
+				<div class="label name">
 					{if $identifyAsEditors}
 						{translate key="submission.editorName" editorName=$author->getFullName()|escape}
 					{else}
 						{$author->getFullName()|escape}
 					{/if}
+					{* Author switcher *}
+					{if isset($pubLocaleData.opts.author)}
+						<span aria-label="{translate key="plugins.themes.default.languageSwitcher.ariaDescription.author"}" role="none" aria-orientation="horizontal" aria-expanded="false" data-pkp-switcher="author{$author@index}"></span>
+					{/if}
 				</div>
-				{if $author->getLocalizedAffiliation()}
-					<div class="value">
-						{$author->getLocalizedAffiliation()|escape}
-					</div>
+				{if $author->getData('affiliation')}
+					{* Publication author for json *}
+					{wrapPubPropData switcher="author{$author@index}" data=$author->getData('affiliation') localeOrder=$pubLocaleData.localeOrder filters=['escape']}
+					{$pubLocaleData["author{$author@index}"]=$wrappedPubPropData}
+					<span
+						class="affiliation"
+						data-pkp-switcher-data="author{$author@index}"
+						lang="{$pubLocaleData.langAttrs[$pubLocaleData["author{$author@index}"].defaultLocale]}"
+					>
+						{$pubLocaleData["author{$author@index}"].data[$pubLocaleData["author{$author@index}"].defaultLocale]}
+					</span>
 				{/if}
 				{if $author->getOrcid()}
 					<span class="orcid">
@@ -58,24 +106,17 @@
 
 		{* Show long author lists on one line *}
 	{else}
-		{foreach name="authors" from=$authors item=author}
-			{* strip removes excess white-space which creates gaps between separators *}
-			{strip}
-				{if $author->getLocalizedAffiliation()}
-					{if $identifyAsEditors}
-						{capture assign="authorName"}<span class="label">{translate key="submission.editorName" editorName=$author->getFullName()|escape}</span>{/capture}
-					{else}
-						{capture assign="authorName"}<span class="label">{$author->getFullName()|escape}</span>{/capture}
-					{/if}
-					{capture assign="authorAffiliation"}<span class="value">{$author->getLocalizedAffiliation()|escape}</span>{/capture}
-					{translate key="submission.authorWithAffiliation" name=$authorName affiliation=$authorAffiliation}
-				{else}
-					<span class="label">{$author->getFullName()|escape}</span>
-				{/if}
-				{if !$smarty.foreach.authors.last}
-					{translate key="submission.authorListSeparator"}
-				{/if}
-			{/strip}
-		{/foreach}
+		{* Publication authors for json *}
+		{concatAuthorsWithAffiliationData authors=$authors localeOrder=$pubLocaleData.localeOrder identifyAsEditors=$identifyAsEditors filters=['escape']}
+		{capture assign="authorSeparator"}{translate key="submission.authorListSeparator"}{/capture}
+		{wrapPubPropData switcher="authors" data=$authorsWithAffiliationData localeOrder=$pubLocaleData.localeOrder separator=$authorSeparator}
+		{$pubLocaleData["authors"]=$wrappedPubPropData}
+		<span data-pkp-switcher-data="authors" lang="{$pubLocaleData.langAttrs[$pubLocaleData["authors"].defaultLocale]}">
+			{$pubLocaleData["authors"].data[$pubLocaleData["authors"].defaultLocale]}
+		</span>
+		{* Authors switcher *}
+		{if isset($pubLocaleData.opts.author)}
+			<span aria-label="{translate key="plugins.themes.default.languageSwitcher.ariaDescription.author"}" role="none" aria-orientation="horizontal" aria-expanded="false" data-pkp-switcher="authors"></span>
+		{/if}
 	{/if}
 </div>
